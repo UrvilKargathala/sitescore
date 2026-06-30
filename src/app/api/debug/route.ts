@@ -34,5 +34,23 @@ export async function GET() {
     results.db_error = err instanceof Error ? err.message : String(err);
   }
 
+  // Test BullMQ queue add
+  try {
+    const { scanQueue } = await import("@/lib/queue");
+    await scanQueue.add("debug-test", { test: true });
+    results.queue_add = "OK";
+  } catch (err) {
+    results.queue_error = err instanceof Error ? err.message : String(err);
+  }
+
+  // Test reachability check
+  try {
+    const { assertReachable } = await import("@/lib/url");
+    await assertReachable("https://example.com");
+    results.reachability = "OK";
+  } catch (err) {
+    results.reachability_error = err instanceof Error ? err.message : String(err);
+  }
+
   return NextResponse.json(results);
 }
