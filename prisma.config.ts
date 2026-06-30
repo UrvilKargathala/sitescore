@@ -1,7 +1,5 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -9,11 +7,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // migrations use the direct (non-pooled) connection; runtime uses pooled
+    // Direct (non-pooled) URL for migrate; falls back to DATABASE_URL if unset
     url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"]!,
-    adapter: () => {
-      const pool = new Pool({ connectionString: process.env["DATABASE_URL"] });
-      return new PrismaPg(pool);
-    },
   },
 });
