@@ -11,7 +11,7 @@ import { launchChrome, runLighthouse } from "./probes/lighthouse";
 import { runAxe } from "./probes/axe";
 import { runSecurityProbe } from "./probes/security";
 import { computeScores, RUBRIC_VERSION } from "../scoring";
-import { REPORT_QUEUE, RETENTION_QUEUE, retentionQueue } from "../queue";
+import { REPORT_QUEUE, RETENTION_QUEUE, getRetentionQueue } from "../queue";
 import { generateAndDeliverReport } from "./report.worker";
 import { purgeExpiredLeads } from "../deletion";
 import type { ScanJobData, ReportJobData } from "../../types/scan";
@@ -207,7 +207,7 @@ retentionWorker.on("error", (err) =>
 // Schedule the nightly retention sweep as a repeatable BullMQ job.
 // Runs at 02:00 UTC every day. Safe to call multiple times — BullMQ deduplicates
 // repeatable jobs by their repeat key.
-retentionQueue
+getRetentionQueue()
   .add(
     "nightly-sweep",
     {},

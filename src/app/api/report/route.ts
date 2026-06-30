@@ -6,7 +6,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { reportQueue } from "@/lib/queue";
+import { getReportQueue } from "@/lib/queue";
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
 
   // ── Enqueue PDF generation job ────────────────────────────────────────────
 
-  const job = await reportQueue.add(
+  const job = await getReportQueue().add(
     "generate-report",
     { leadId: lead.id, scanId },
     { jobId: `report-${lead.id}` } // idempotent: same lead re-queues to same jobId

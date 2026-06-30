@@ -36,8 +36,8 @@ export async function GET() {
 
   // Test BullMQ queue add
   try {
-    const { scanQueue } = await import("@/lib/queue");
-    await scanQueue.add("debug-test", { test: true });
+    const { getScanQueue } = await import("@/lib/queue");
+    await getScanQueue().add("debug-test", { test: true });
     results.queue_add = "OK";
   } catch (err) {
     results.queue_error = err instanceof Error ? err.message : String(err);

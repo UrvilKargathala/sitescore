@@ -6,7 +6,7 @@ import {
   assertReachable,
   UrlValidationError,
 } from "@/lib/url";
-import { scanQueue } from "@/lib/queue";
+import { getScanQueue } from "@/lib/queue";
 import { prisma } from "@/lib/db";
 import {
   checkIpRateLimit,
@@ -143,6 +143,7 @@ async function handlePost(req: NextRequest) {
   });
 
   // 10. Enqueue — race against 5 s so a down Redis returns a clean error
+  const scanQueue = getScanQueue();
   let job: Awaited<ReturnType<typeof scanQueue.add>>;
   try {
     const timeout = new Promise<never>((_, reject) =>

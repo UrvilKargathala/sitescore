@@ -13,15 +13,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseDeletionToken, deleteLeadById, deleteLeadsByEmail } from "@/lib/deletion";
 import Redis from "ioredis";
+import { getRedisConfig } from "@/lib/queue/redis";
 
 let _redis: Redis | null = null;
 function getRedis(): Redis {
   if (!_redis) {
-    _redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
-      maxRetriesPerRequest: 1,
-      enableReadyCheck: false,
-      lazyConnect: true,
-    });
+    _redis = new Redis({ ...getRedisConfig(), maxRetriesPerRequest: 1, lazyConnect: true });
   }
   return _redis;
 }
