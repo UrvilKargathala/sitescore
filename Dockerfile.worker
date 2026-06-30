@@ -3,9 +3,10 @@ FROM mcr.microsoft.com/playwright:v1.61.1-jammy
 WORKDIR /app
 
 COPY package.json package-lock.json ./
+COPY prisma ./prisma
+COPY prisma.config.ts ./
 RUN npm install
 
 COPY . .
-RUN npx prisma generate
 
 CMD ["npm", "run", "worker"]
