@@ -30,6 +30,15 @@ function getClientIp(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
+  try {
+    return await handlePost(req);
+  } catch (err) {
+    console.error("[scan] unhandled error:", err);
+    return NextResponse.json({ error: "An unexpected error occurred. Please try again." }, { status: 500 });
+  }
+}
+
+async function handlePost(req: NextRequest) {
   // 1. Parse body
   let raw: string;
   try {
@@ -63,7 +72,7 @@ export async function POST(req: NextRequest) {
   const hostname = new URL(normalized).hostname;
   const ip       = getClientIp(req);
 
-  // 4. Per-IP rate limit (5 scans / hour)
+  // 4. Per-IP rate limit (5 scans / hour) — fail open on Redis errors
   try {
     await checkIpRateLimit(ip);
   } catch (err) {
@@ -73,11 +82,16 @@ export async function POST(req: NextRequest) {
         headers: { "Retry-After": String(err.retryAfterSecs) },
       });
     }
-    throw err;
+    console.error("[scan] IP rate limit check failed (Redis?), continuing:", err);
   }
 
-  // 5. Scan result cache — serve existing completed scan transparently
-  const cached = await findCachedScan(hostname);
+  // 5. Scan result cache — fail open on Redis/DB errors
+  let cached = null;
+  try {
+    cached = await findCachedScan(hostname);
+  } catch (err) {
+    console.error("[scan] cache lookup failed, continuing:", err);
+  }
   if (cached) {
     console.log("[scan] cache hit for", hostname, "→ scanId", cached.id);
     return NextResponse.json(
@@ -86,8 +100,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 6. Per-domain rate limit (1 scan / 10 min) — after cache so a fresh
-  //    domain only gets one scan in flight at a time
+  // 6. Per-domain rate limit (1 scan / 10 min) — fail open on Redis errors
   try {
     await checkDomainRateLimit(hostname);
   } catch (err) {
@@ -97,7 +110,7 @@ export async function POST(req: NextRequest) {
         headers: { "Retry-After": String(err.retryAfterSecs) },
       });
     }
-    throw err;
+    console.error("[scan] domain rate limit check failed (Redis?), continuing:", err);
   }
 
   // 7. robots.txt — fail open (network error → allowed)
