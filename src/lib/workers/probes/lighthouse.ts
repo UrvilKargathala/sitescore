@@ -108,6 +108,17 @@ export async function launchChrome() {
       "--no-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-default-apps",
+      "--disable-sync",
+      "--disable-translate",
+      "--hide-scrollbars",
+      "--metrics-recording-only",
+      "--mute-audio",
+      "--no-first-run",
+      "--safebrowsing-disable-auto-update",
+      "--js-flags=--max-old-space-size=256",
     ],
   });
 }

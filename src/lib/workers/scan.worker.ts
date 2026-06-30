@@ -16,7 +16,7 @@ import { generateAndDeliverReport } from "./report.worker";
 import { purgeExpiredLeads } from "../deletion";
 import type { ScanJobData, ReportJobData } from "../../types/scan";
 
-const CONCURRENCY = 2;
+const CONCURRENCY = 1; // one scan at a time to stay within 1 GB Railway RAM
 // Production target is 90 s p95, but two cold Lighthouse passes on real sites need ~120 s on dev.
 // Tighten back to 90 s when running on a dedicated scan server.
 const SCAN_TIMEOUT_MS = 180_000;
