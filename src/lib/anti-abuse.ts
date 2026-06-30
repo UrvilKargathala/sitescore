@@ -14,19 +14,15 @@
 
 import Redis from "ioredis";
 import { prisma } from "./db";
+import { redis as redisConfig } from "./queue/redis";
 
-// ── Redis client (plain ioredis, separate from BullMQ config object) ──────────
+// ── Redis client ───────────────────────────────────────────────────────────────
 
 let _redis: Redis | null = null;
 
 function getRedis(): Redis {
   if (!_redis) {
-    _redis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
-      maxRetriesPerRequest: 1,
-      enableReadyCheck: false,
-      connectTimeout: 3000,
-      lazyConnect: true,
-    });
+    _redis = new Redis({ ...redisConfig, maxRetriesPerRequest: 1, lazyConnect: true });
     _redis.on("error", (e) => console.error("[anti-abuse] Redis error:", e.message));
   }
   return _redis;
