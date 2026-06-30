@@ -14,7 +14,7 @@
 
 import Redis from "ioredis";
 import { prisma } from "./db";
-import { redis as redisConfig } from "./queue/redis";
+import { getRedisConfig } from "./queue/redis";
 
 // ── Redis client ───────────────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ let _redis: Redis | null = null;
 
 function getRedis(): Redis {
   if (!_redis) {
-    _redis = new Redis({ ...redisConfig, maxRetriesPerRequest: 1, lazyConnect: true });
+    _redis = new Redis({ ...getRedisConfig(), maxRetriesPerRequest: 1, lazyConnect: true });
     _redis.on("error", (e) => console.error("[anti-abuse] Redis error:", e.message));
   }
   return _redis;

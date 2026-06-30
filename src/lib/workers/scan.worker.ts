@@ -4,7 +4,7 @@
  */
 import "dotenv/config";
 import { Worker, Job } from "bullmq";
-import { redis } from "../queue/redis";
+import { getRedisConfig } from "../queue/redis";
 import { SCAN_QUEUE } from "../queue";
 import { prisma } from "../db";
 import { launchChrome, runLighthouse } from "./probes/lighthouse";
@@ -149,7 +149,7 @@ const worker = new Worker<ScanJobData>(
     }
   },
   {
-    connection: redis,
+    connection: getRedisConfig(),
     concurrency: CONCURRENCY,
     // Don't use BullMQ's built-in timeout — we handle it ourselves so we can
     // write the failure reason to DB before BullMQ kills the job.
@@ -174,7 +174,7 @@ const reportWorker = new Worker<ReportJobData>(
     await generateAndDeliverReport(leadId, scanId);
   },
   {
-    connection: redis,
+    connection: getRedisConfig(),
     concurrency: 2,
   }
 );
@@ -194,7 +194,7 @@ const retentionWorker = new Worker(
     const deleted = await purgeExpiredLeads();
     console.log(`[retention] sweep complete — removed ${deleted} expired lead(s)`);
   },
-  { connection: redis, concurrency: 1 }
+  { connection: getRedisConfig(), concurrency: 1 }
 );
 
 retentionWorker.on("failed", (job, err) =>
