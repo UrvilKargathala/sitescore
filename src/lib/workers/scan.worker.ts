@@ -151,8 +151,13 @@ const worker = new Worker<ScanJobData>(
   {
     connection: getRedisConfig(),
     concurrency: CONCURRENCY,
-    // Don't use BullMQ's built-in timeout — we handle it ourselves so we can
-    // write the failure reason to DB before BullMQ kills the job.
+    // stalledInterval: how often BullMQ checks for jobs whose worker process
+    // was OOM-killed or crashed mid-run without marking the job done/failed.
+    // lockDuration must exceed SCAN_TIMEOUT_MS so the job isn't falsely
+    // treated as stalled while Chrome is legitimately still running.
+    lockDuration: 240_000,    // 4 min lock — longer than SCAN_TIMEOUT_MS (3 min)
+    stalledInterval: 30_000,  // check for stalled jobs every 30 s
+    maxStalledCount: 1,       // retry once, then mark failed
   }
 );
 
