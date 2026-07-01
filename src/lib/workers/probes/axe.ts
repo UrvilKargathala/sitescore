@@ -1,6 +1,6 @@
 /**
- * Accessibility probe — connects to an already-running Chrome via CDP and
- * injects axe-core to audit the page. No new browser process is launched.
+ * Accessibility probe — launches a headless Chromium browser via Playwright,
+ * navigates to the URL, and injects axe-core to audit the page.
  *
  * Output MUST be presented as an automated scan, never as a certified WCAG
  * audit. axe-core detects ~30-40% of real accessibility issues.
@@ -19,25 +19,25 @@ export interface AxeFindings {
   error: string | null;
 
   summary: {
-    critical: number;
-    serious: number;
-    moderate: number;
-    minor: number;
-    total: number;
-    passes: number;
+    critical:   number;
+    serious:    number;
+    moderate:   number;
+    minor:      number;
+    total:      number;
+    passes:     number;
     incomplete: number;
   };
 
   violations: Array<{
-    id: string;
-    impact: string | null;
-    description: string;
-    help: string;
-    helpUrl: string;
+    id:           string;
+    impact:       string | null;
+    description:  string;
+    help:         string;
+    helpUrl:      string;
     wcagCriteria: string[];
     nodes: Array<{
-      target: string[];
-      html: string;
+      target:         string[];
+      html:           string;
       failureSummary: string;
     }>;
   }>;
@@ -63,18 +63,27 @@ function emptyFindings(url: string, error: string): AxeFindings {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
- * Run axe-core against `url` using an already-running Chrome on `cdpPort`.
- * Opens a new browser context + page, so Lighthouse state is not disturbed.
- * Disconnects when done but does NOT kill Chrome — the caller owns that.
+ * Run axe-core against `url` using a dedicated Playwright browser.
+ * Launches and kills its own browser — no shared Chrome state.
  */
-export async function runAxe(url: string, cdpPort: number): Promise<AxeFindings> {
+export async function runAxe(url: string): Promise<AxeFindings> {
   let browser;
   try {
-    browser = await chromium.connectOverCDP(`http://localhost:${cdpPort}`);
+    browser = await chromium.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--mute-audio",
+      ],
+    });
   } catch (err) {
     return emptyFindings(
       url,
-      `Could not connect to Chrome on port ${cdpPort}: ${err instanceof Error ? err.message : String(err)}`
+      `Could not launch browser: ${err instanceof Error ? err.message : String(err)}`
     );
   }
 
@@ -87,7 +96,6 @@ export async function runAxe(url: string, cdpPort: number): Promise<AxeFindings>
     // Inject the axe-core script into the page context
     await page.addScriptTag({ content: axeCore.source });
 
-    // Run the scan inside the browser; cap nodes per violation to keep JSON lean
     const raw = await page.evaluate(() => {
       return (window as unknown as {
         axe: { run: (opts: unknown) => Promise<unknown> };
@@ -107,21 +115,20 @@ export async function runAxe(url: string, cdpPort: number): Promise<AxeFindings>
         tags: string[];
         nodes: Array<{ target: unknown[]; html: string; failureSummary?: string }>;
       }>;
-      passes: unknown[];
+      passes:     unknown[];
       incomplete: unknown[];
     };
 
     const violations = raw.violations.map((v) => ({
-      id: v.id,
-      impact: v.impact ?? null,
+      id:          v.id,
+      impact:      v.impact ?? null,
       description: v.description,
-      help: v.help,
-      helpUrl: v.helpUrl,
+      help:        v.help,
+      helpUrl:     v.helpUrl,
       wcagCriteria: v.tags.filter((t) => /^wcag/.test(t) || t === "best-practice"),
-      // Cap to 5 nodes per rule to keep the stored JSON manageable
       nodes: v.nodes.slice(0, 5).map((n) => ({
-        target: n.target.map(String),
-        html: n.html.slice(0, 500),
+        target:         n.target.map(String),
+        html:           n.html.slice(0, 500),
         failureSummary: n.failureSummary ?? "",
       })),
     }));
@@ -130,7 +137,7 @@ export async function runAxe(url: string, cdpPort: number): Promise<AxeFindings>
 
     return {
       disclaimer: DISCLAIMER,
-      runAt: new Date().toISOString(),
+      runAt:      new Date().toISOString(),
       url,
       error: null,
       summary: {
@@ -150,7 +157,6 @@ export async function runAxe(url: string, cdpPort: number): Promise<AxeFindings>
       `axe scan failed: ${err instanceof Error ? err.message : String(err)}`
     );
   } finally {
-    // Close the context and disconnect — does NOT kill Chrome (caller owns it)
     try { await context.close(); } catch { /* ignore */ }
     try { await browser.close(); } catch { /* ignore */ }
   }

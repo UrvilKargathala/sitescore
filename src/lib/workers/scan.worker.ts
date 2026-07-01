@@ -7,7 +7,7 @@ import { Worker, Job } from "bullmq";
 import { getRedisConfig } from "../queue/redis";
 import { SCAN_QUEUE } from "../queue";
 import { prisma } from "../db";
-import { launchChrome, runLighthouse } from "./probes/lighthouse";
+import { runPageSpeed } from "./probes/pagespeed";
 import { runAxe } from "./probes/axe";
 import { runSecurityProbe } from "./probes/security";
 import { computeScores, RUBRIC_VERSION } from "../scoring";
@@ -16,10 +16,8 @@ import { generateAndDeliverReport } from "./report.worker";
 import { purgeExpiredLeads } from "../deletion";
 import type { ScanJobData, ReportJobData } from "../../types/scan";
 
-const CONCURRENCY = 1; // one scan at a time to stay within 1 GB Railway RAM
-// Production target is 90 s p95, but two cold Lighthouse passes on real sites need ~120 s on dev.
-// Tighten back to 90 s when running on a dedicated scan server.
-const SCAN_TIMEOUT_MS = 180_000;
+const CONCURRENCY = 2; // PSI is a remote API call — no local Chrome for Lighthouse
+const SCAN_TIMEOUT_MS = 120_000; // 2 min — PSI + axe together should finish well within this
 
 // Map common Lighthouse/Chrome error strings to human-readable reasons
 function classifyError(err: unknown): string {
@@ -54,23 +52,19 @@ async function processScan(job: Job<ScanJobData>) {
   );
 
   // All three probes run in parallel:
-  //   - Lighthouse: spins up its own two Chrome instances (desktop + mobile)
-  //   - axe: gets a dedicated Chrome instance for CDP injection
+  //   - PageSpeed: two remote PSI API calls (desktop + mobile) — no local Chrome
+  //   - axe: one Playwright browser for accessibility injection
   //   - security: pure HTTP, no Chrome needed
-  const [lighthouseResult, axeResult, securityResult] = await Promise.race([
+  const [pageSpeedResult, axeResult, securityResult] = await Promise.race([
     Promise.all([
-      runLighthouse(url),
-      (async () => {
-        const chrome = await launchChrome();
-        try { return await runAxe(url, chrome.port); }
-        finally { await chrome.kill(); }
-      })(),
+      runPageSpeed(url),
+      runAxe(url),
       runSecurityProbe(url),
     ]),
     timeoutError,
   ]);
 
-  const { desktop, mobile } = lighthouseResult;
+  const { desktop, mobile } = pageSpeedResult;
 
   console.log(
     `[worker] security probe done — HTTPS:${securityResult.https.served}`,
@@ -84,7 +78,7 @@ async function processScan(job: Job<ScanJobData>) {
   );
 
   const scored = computeScores({
-    lighthouseDesktop: desktop,
+    lighthouseDesktop: desktop,        // PSI lighthouseResult — identical LHR shape
     lighthouseMobile:  mobile,
     securityJson:      securityResult,
     axeJson:           axeResult,
@@ -105,7 +99,7 @@ async function processScan(job: Job<ScanJobData>) {
       status: "COMPLETED",
       completedAt: new Date(),
       rulebookVersion:   RUBRIC_VERSION,
-      lighthouseDesktop: desktop as object,
+      lighthouseDesktop: desktop as object, // PSI lighthouseResult — same LHR shape
       lighthouseMobile:  mobile as object,
       securityJson:      securityResult as object,
       axeJson:           axeResult as object,
@@ -155,7 +149,7 @@ const worker = new Worker<ScanJobData>(
     // was OOM-killed or crashed mid-run without marking the job done/failed.
     // lockDuration must exceed SCAN_TIMEOUT_MS so the job isn't falsely
     // treated as stalled while Chrome is legitimately still running.
-    lockDuration: 240_000,    // 4 min lock — longer than SCAN_TIMEOUT_MS (3 min)
+    lockDuration: 150_000,    // 2.5 min lock — longer than SCAN_TIMEOUT_MS (2 min)
     stalledInterval: 30_000,  // check for stalled jobs every 30 s
     maxStalledCount: 1,       // retry once, then mark failed
   }
